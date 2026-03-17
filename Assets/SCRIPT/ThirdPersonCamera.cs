@@ -2,10 +2,10 @@ using UnityEngine;
 
 public class FPS_Camera : MonoBehaviour
 {
-    public Transform target;        // PlayerRoot 下的 CameraTarget
+    public Transform target;        
     public float mouseSensitivity = 2.0f;
-    // 确保 Z 是负数！比如 -3 表示在背后 3 米
     public Vector3 offset = new Vector3(0.5f, 1.8f, -3.0f); 
+    public KeyCode altKey = KeyCode.LeftAlt; // 保持按键一致
 
     private float xRotation = 0f;
     private float yRotation = 0f;
@@ -13,14 +13,14 @@ public class FPS_Camera : MonoBehaviour
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
-        // 初始化 yRotation，防止一进游戏视角瞬间跳变
-        yRotation = target.eulerAngles.y;
+        if (target) yRotation = target.eulerAngles.y;
     }
 
     void LateUpdate()
     {
         if (!target) return;
 
+        // 读取鼠标输入
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 
@@ -28,14 +28,12 @@ public class FPS_Camera : MonoBehaviour
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -40f, 60f);
 
-        // 核心修正：旋转叠加
+        // 计算旋转
         Quaternion rotation = Quaternion.Euler(xRotation, yRotation, 0);
         
-        // 计算位置：角色位置 + 旋转后的偏移
-        // 这样当你转鼠标时，offset 也会绕着角色转
+        // 关键逻辑：松开 Alt 的瞬间，身体会同步相机的 yRotation（在玩家脚本处理）
+        // 这里相机只负责根据 yRotation 计算自己的位置
         transform.position = target.position + (rotation * offset);
-        
-        // 看着角色前方的一个点（比如准星位置）
         transform.LookAt(target.position + rotation * Vector3.forward * 10f);
     }
 }
