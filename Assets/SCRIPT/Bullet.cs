@@ -30,9 +30,10 @@ public class Bullet : MonoBehaviour
     public float trailWidth = 0.06f;   // 拖尾最宽处
 
     // ── 私有
-    private Rigidbody      _rb;
-    private TrailRenderer  _trail;
-    private Light          _light;
+    private Rigidbody  _rb;
+    private TrailRenderer _trail;
+    private Light      _light;
+    private static CrosshairUI _crosshair;  // 全局缓存，所有子弹共用
 
     void Awake()
     {
@@ -63,16 +64,16 @@ public class Bullet : MonoBehaviour
         // 删掉子物体上多余的 Collider（碰撞由父物体处理）
         Destroy(core.GetComponent<Collider>());
 
-        // 发光材质（URP Unlit，不受光照影响，始终亮）
-        var mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-        if (mat.shader.name == "Hidden/InternalErrorShader")
-        {
-            // 非 URP 项目回退到内置 Unlit
-            mat = new Material(Shader.Find("Unlit/Color"));
-        }
+        // 发光材质 — 用 Unlit 系列，打包时不会丢失
+        Material mat;
+        Shader unlitShader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (unlitShader == null) unlitShader = Shader.Find("Unlit/Color");
+        if (unlitShader == null) unlitShader = Shader.Find("Standard");
+
+        mat = new Material(unlitShader);
         mat.color = bulletColor;
 
-        // 尝试开启 HDR Emission（让弹头在 Bloom 后处理下发光）
+        // HDR Emission（Bloom 发光）
         if (mat.HasProperty("_EmissionColor"))
         {
             mat.EnableKeyword("_EMISSION");
@@ -134,13 +135,26 @@ public class Bullet : MonoBehaviour
     {
         if (other.isTrigger) return;
 
-        // 伤害
-        other.GetComponent<HealthSystem>()?.TakeDamage(damage);
+        var health = other.GetComponentInParent<HealthSystem>();
+        if (health != null)
+        {
+            float hpBefore  = health.currentHealth;
+            health.TakeDamage(damage);
+            float actualDmg = hpBefore - health.currentHealth;
 
-        // 击中爆散粒子（代码生成，不需要 Prefab）
+            if (actualDmg > 0f)
+            {
+                DamageNumberSpawner.Spawn(transform.position, actualDmg);
+
+                // 通知准星变橙（缓存引用，不每次查找）
+                if (_crosshair == null)
+                    _crosshair = FindFirstObjectByType<CrosshairUI>();
+                if (_crosshair != null) _crosshair.ShowHit();
+            }
+        }
+
         SpawnHitFX();
 
-        // 拖尾需要脱离父物体独立消亡，否则会瞬间消失
         if (_trail != null)
         {
             _trail.transform.SetParent(null);

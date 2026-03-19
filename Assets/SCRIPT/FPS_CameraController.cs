@@ -58,6 +58,16 @@ public class FPS_Camera : MonoBehaviour
     private float currentX  = 0f;
     private float currentY  = 0f;
 
+    // ── 私有：自由视角
+    private bool  _isFreeLooking      = false;
+    private float _freeLookYaw        = 0f;
+    private float _freeLookPitch      = 0f;
+    private float _savedYaw           = 0f;
+    private float _savedPitch         = 0f;
+    public  float freeLookReturnSpeed = 35f;  // 回正速度，Inspector 可调
+    private bool  _isReturning        = false;
+    private bool  _isSnapReturning    = false;  // 松开Alt后的平滑回正状态
+
     // ── 私有：震动（本地空间偏移，不受 LookAt 影响）
     private float   shakeTimer     = 0f;
     private float   shakeDuration  = 0f;
@@ -74,10 +84,14 @@ public class FPS_Camera : MonoBehaviour
     private bool  _wasGrounded   = true;
     private float _lastVelocityY = 0f;
 
+    /// <summary>当前是否处于 Alt 自由视角模式</summary>
+    public bool IsFreeLooking => _isFreeLooking;
+
     void Start()
     {
         // 锁定鼠标到屏幕中心（准星固定中心模式）
-        Cursor.lockState = CursorLockMode.Locked;
+        // 鼠标瞄准模式：Confined + 隐藏，由 InventoryUI 控制显隐
+        Cursor.lockState = CursorLockMode.Confined;
         Cursor.visible   = false;
         if (target) yRotation = target.eulerAngles.y;
         currentX = xRotation;
@@ -116,34 +130,92 @@ public class FPS_Camera : MonoBehaviour
 
         UpdateShake();
         UpdateBob();
+        UpdateRecoil();
     }
 
     void LateUpdate()
     {
         if (!target) return;
 
-        // ── 背包打开时暂停鼠标旋转输入，但相机继续跟随角色位置
+        // ── 背包打开时暂停鼠标旋转输入
         if (!InventoryUI.IsOpen)
         {
-            yRotation += Input.GetAxis("Mouse X") * mouseSensitivity;
-            xRotation -= Input.GetAxis("Mouse Y") * mouseSensitivity;
-            xRotation  = Mathf.Clamp(xRotation, minPitch, maxPitch);
+            bool altHeld = Input.GetKey(altKey);
+
+            if (altHeld && !_isFreeLooking)
+            {
+                // 刚按下 Alt：保存当前相机角度，自由视角从这里开始
+                _isFreeLooking = true;
+                _savedYaw      = yRotation;
+                _savedPitch    = xRotation;
+                _freeLookYaw   = yRotation;
+                _freeLookPitch = xRotation;
+            }
+            else if (!altHeld && _isFreeLooking)
+            {
+                // 松开 Alt：
+                // currentX/Y 保持在自由视角当前位置（不赋值，让 Lerp 从这里开始）
+                // xRotation/yRotation 设为目标（普通相机跟随角色的角度）
+                _isFreeLooking   = false;
+                _isReturning     = false;
+                _isSnapReturning = true;   // 启动平滑回正
+                // currentX/currentY 故意不动，保留自由视角最后的角度
+                // 下方 Lerp 会从这里平滑过渡到 xRotation/yRotation
+                xRotation = _freeLookPitch;   // 普通模式目标 = 自由视角结束角度
+                yRotation = _freeLookYaw;     // 两者此刻相同，之后普通模式输入会改变 xRotation/yRotation
+
+                // 触发角色转身（平滑，由 PlayerController 的 snapBack 处理）
+                if (_player != null)
+                    _player.StartSnapBack(_freeLookYaw);
+            }
+
+            if (_isFreeLooking)
+            {
+                // ── 自由视角：鼠标控制独立的FreeLook角度，完全不动 yRotation/xRotation
+                _freeLookYaw   += Input.GetAxis("Mouse X") * mouseSensitivity;
+                _freeLookPitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
+                _freeLookPitch  = Mathf.Clamp(_freeLookPitch, minPitch, maxPitch);
+                // 水平360度不限制
+            }
+            else
+            {
+                // ── 普通模式：鼠标直接控制相机
+                yRotation += Input.GetAxis("Mouse X") * mouseSensitivity;
+                xRotation -= Input.GetAxis("Mouse Y") * mouseSensitivity;
+                xRotation  = Mathf.Clamp(xRotation, minPitch, maxPitch);
+            }
         }
 
-        if (rotationSmoothing > 0f)
+        if (_isFreeLooking)
         {
-            float spd = 1f / Mathf.Max(rotationSmoothing, 0.001f);
-            currentX  = Mathf.LerpAngle(currentX, xRotation, Time.deltaTime * spd);
-            currentY  = Mathf.LerpAngle(currentY, yRotation, Time.deltaTime * spd);
+            currentX = _freeLookPitch;
+            currentY = _freeLookYaw;
+        }
+        else if (_isSnapReturning)
+        {
+            // 松开Alt后平滑回正——只有这段时间才用 Lerp
+            currentX = Mathf.LerpAngle(currentX, xRotation, Time.deltaTime * 25f);
+            currentY = Mathf.LerpAngle(currentY, yRotation, Time.deltaTime * 25f);
+
+            // 足够近就结束 snap，切回即时模式
+            if (Mathf.Abs(Mathf.DeltaAngle(currentX, xRotation)) < 0.3f &&
+                Mathf.Abs(Mathf.DeltaAngle(currentY, yRotation)) < 0.3f)
+            {
+                currentX         = xRotation;
+                currentY         = yRotation;
+                _isSnapReturning = false;
+            }
         }
         else
         {
-            currentX = xRotation;
-            currentY = yRotation;
+            // ★ 正常瞄准模式：直接赋值，零延迟，无滑动感
+            currentX     = xRotation;
+            currentY     = yRotation;
+            _isReturning = false;
         }
 
-        // ── 计算基础位置
-        Quaternion rotation      = Quaternion.Euler(currentX, currentY, 0f);
+        // ── 计算基础位置（后坐偏移叠加到 pitch）
+        Quaternion rotation   = Quaternion.Euler(currentX - _recoilPitch, currentY, 0f);
         Vector3    desiredPos    = target.position + rotation * offset;
 
         // ── 防穿墙
@@ -204,11 +276,30 @@ public class FPS_Camera : MonoBehaviour
     // ════════════════════════════════════════════════════
     //  震动
     // ════════════════════════════════════════════════════
-    void TriggerShake(float magnitude, float duration)
+    public void TriggerShake(float magnitude, float duration)
     {
         shakeMagnitude = magnitude;
         shakeDuration  = duration;
         shakeTimer     = duration;
+    }
+
+    // ── 开火后坐：pitch 向上偏然后弹回
+    private float _recoilPitch     = 0f;   // 当前后坐偏移量
+    private float _recoilTarget    = 0f;   // 目标偏移（开火时设置）
+    private float _recoilSpeed     = 20f;  // 恢复速度
+
+    /// <summary>WeaponController 每次开火时调用</summary>
+    public void TriggerRecoil(float amount = 1.5f)
+    {
+        _recoilTarget += amount;   // 叠加，连射时后坐累积
+    }
+
+    void UpdateRecoil()
+    {
+        // 目标值衰减
+        _recoilTarget  = Mathf.Lerp(_recoilTarget, 0f, Time.deltaTime * 8f);
+        // 实际 pitch 跟随目标
+        _recoilPitch   = Mathf.Lerp(_recoilPitch, _recoilTarget, Time.deltaTime * _recoilSpeed);
     }
 
     void UpdateShake()

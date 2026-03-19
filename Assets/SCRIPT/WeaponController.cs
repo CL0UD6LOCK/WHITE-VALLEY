@@ -33,7 +33,9 @@ public class WeaponController : MonoBehaviour
     private AudioSource     _audio;
     private Camera          _cam;
     private CharacterController _cc;
+    private FPS_Camera      _fpsCamera;
 
+    private FPS_Camera _camScript;
     private float _rightCooldown  = 0f;
     private float _leftCooldown   = 0f;
     private bool  _rightReloading = false;
@@ -55,21 +57,22 @@ public class WeaponController : MonoBehaviour
         _inv   = GetComponent<InventorySystem>();
         _audio = GetComponent<AudioSource>();
         if (_audio == null) _audio = gameObject.AddComponent<AudioSource>();
-        _cam   = Camera.main;
-        _cc    = GetComponent<CharacterController>();
+        _cam      = Camera.main;
+        _cc       = GetComponent<CharacterController>();
+        _fpsCamera = FindFirstObjectByType<FPS_Camera>();
     }
 
     void Start()
     {
         _inv.onInventoryChanged.AddListener(RefreshHandModels);
         RefreshHandModels();
-
-        // 鼠标由 CrosshairUI 统一管理
+        _camScript = FindFirstObjectByType<FPS_Camera>();
     }
 
     void Update()
     {
         if (InventoryUI.IsOpen) return;
+        if (_camScript != null && _camScript.IsFreeLooking) return;  // 自由视角时禁止射击
 
         if (_rightCooldown > 0) _rightCooldown -= Time.deltaTime;
         if (_leftCooldown  > 0) _leftCooldown  -= Time.deltaTime;
@@ -111,13 +114,13 @@ public class WeaponController : MonoBehaviour
     // ════════════════════════════════════════
     void RotateBodyTowardAim()
     {
-        if (!HasAimPoint) return;
+        // 用相机水平朝向旋转角色身体，不用瞄准点
+        // 避免俯视时射线打到近处地面导致角色乱转/滑动
+        Vector3 camForward = _cam.transform.forward;
+        camForward.y = 0f;
+        if (camForward.sqrMagnitude < 0.01f) return;
 
-        Vector3 dir = AimWorldPoint - transform.position;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.01f) return;
-
-        Quaternion targetRot = Quaternion.LookRotation(dir);
+        Quaternion targetRot = Quaternion.LookRotation(camForward);
         transform.rotation   = Quaternion.RotateTowards(
             transform.rotation, targetRot, bodyTurnSpeed * Time.deltaTime);
     }
@@ -146,6 +149,10 @@ public class WeaponController : MonoBehaviour
         FireBullet(weapon, isRight);
         PlaySound(weapon.shootSound);
         SpawnMuzzleFlash(weapon, isRight);
+
+        // 开火后坐
+        if (_fpsCamera != null) _fpsCamera.TriggerRecoil(0.6f);
+        if (_camScript != null) _camScript.TriggerShake(0.06f, 0.1f);
     }
 
     void FireBullet(WeaponData weapon, bool isRight)

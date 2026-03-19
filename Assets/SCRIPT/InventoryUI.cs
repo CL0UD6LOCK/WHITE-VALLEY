@@ -116,15 +116,15 @@ public class InventoryUI : MonoBehaviour
 
         if (open)
         {
-            // 打开背包：完全解锁鼠标，显示系统光标
-            Cursor.lockState = CursorLockMode.None;
+            // 打开背包：解锁鼠标，显示系统光标，游戏继续运行
+            Cursor.lockState = CursorLockMode.Confined;
             Cursor.visible   = true;
             Refresh();
         }
         else
         {
-            // 关闭背包：锁定到中心，准星接管
-            Cursor.lockState = CursorLockMode.Locked;
+            // 关闭背包：隐藏光标（鼠标瞄准模式用自定义准星）
+            Cursor.lockState = CursorLockMode.Confined;
             Cursor.visible   = false;
         }
     }

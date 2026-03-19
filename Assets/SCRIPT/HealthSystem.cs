@@ -25,12 +25,22 @@ public class HealthSystem : MonoBehaviour
     {
         if (IsDead) return;
 
-        currentHealth = Mathf.Max(0f, currentHealth - amount);
-        onDamaged?.Invoke(amount);
+        // ★ 减伤接口：以后做减伤道具/护甲直接改这里
+        float finalDamage = Mathf.Max(0f, amount * damageMultiplier - flatDefense);
+
+        currentHealth = Mathf.Max(0f, currentHealth - finalDamage);
+        onDamaged?.Invoke(finalDamage);
 
         if (currentHealth <= 0f)
             onDeath?.Invoke();
     }
+
+    // ── 减伤参数（供道具/Buff系统修改）
+    [Header("减伤（供道具系统使用）")]
+    [Tooltip("伤害倍率，1=无减伤，0.5=减伤50%")]
+    public float damageMultiplier = 1f;
+    [Tooltip("固定减伤值，每次伤害直接减去此数值")]
+    public float flatDefense      = 0f;
 
     public void Heal(float amount)
     {
