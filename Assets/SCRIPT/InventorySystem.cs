@@ -24,6 +24,12 @@ public class InventorySystem : MonoBehaviour
     void Awake()
     {
         Instance = this;
+
+        // 强制确保数组长度正确，防止 Unity 序列化覆盖
+        if (slots == null || slots.Length != 2)
+            slots = new WeaponData[2];
+        if (ammoInSlot == null || ammoInSlot.Length != 2)
+            ammoInSlot = new int[2];
     }
 
     // ════════════════════════════════════════

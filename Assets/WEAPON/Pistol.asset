@@ -13,12 +13,13 @@ MonoBehaviour:
   m_Name: Pistol
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
   weaponName: Pistol
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 87fe0c492f379bf4a9f152ee24e2c977, type: 3}
   modelPrefab: {fileID: -2107819642960987949, guid: 455419a4ae407d04cb88bf9b5c5164d1, type: 3}
-  damage: 25
-  fireRate: 0.2
-  maxAmmo: 12
-  reloadTime: 1.5
+  rarity: 5
+  damage: 10
+  fireRate: 0.05
+  maxAmmo: 30
+  reloadTime: 2
   bulletPrefab: {fileID: 569333332848707673, guid: 97b13374cb4ea704c8fb0a1129ceea41, type: 3}
   bulletSpeed: 30
   bulletLifetime: 3

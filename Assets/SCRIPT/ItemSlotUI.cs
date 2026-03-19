@@ -5,7 +5,7 @@ using TMPro;
 
 /// <summary>
 /// 单个武器槽位 UI
-/// 挂在每个槽位 GameObject 上（Slot_0, Slot_1, RightHandSlot, LeftHandSlot）
+/// 挂在 Slot_0 和 Slot_1 上
 /// </summary>
 public class ItemSlotUI : MonoBehaviour,
     IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler
@@ -14,40 +14,29 @@ public class ItemSlotUI : MonoBehaviour,
     public Image    iconImage;
     public TMP_Text nameText;
     public TMP_Text ammoText;
-    public Image    rightHandBadge;   // "右手"标记图片（可选）
-    public Image    leftHandBadge;    // "左手"标记图片（可选）
-    public Image    emptyOverlay;     // 空槽遮罩（可选）
+    public Image    rightHandBadge;
+    public Image    leftHandBadge;
+    public Image    emptyOverlay;
 
-    // ── 状态
     [HideInInspector] public int        slotIndex;
     [HideInInspector] public bool       isEquipSlot;
     [HideInInspector] public bool       equipIsRight;
     [HideInInspector] public WeaponData currentWeapon;
 
-    // ── 回调（由 InventoryUI 在 Awake 里绑定）
-    [HideInInspector] public System.Action<ItemSlotUI>             onRightClick;
     [HideInInspector] public System.Action<ItemSlotUI, ItemSlotUI> onDrop;
+    [HideInInspector] public System.Action<ItemSlotUI>             onDropOutside;
 
-    // ── 拖拽（全局共享，同时只有一个拖拽源）
     private static GameObject _floatingIcon;
     private static ItemSlotUI _dragSource;
-    private CanvasGroup _canvasGroup;
+    private CanvasGroup       _canvasGroup;
+    private RectTransform     _panelRect;
 
     void Awake()
     {
-        // 自动添加 CanvasGroup（拖拽半透明效果需要）
         _canvasGroup = GetComponent<CanvasGroup>();
-        if (_canvasGroup == null) _canvasGroup = gameObject.AddComponent<CanvasGroup>();
-
-        // 关闭所有直接子物体的 Raycast Target，避免遮挡 OnDrop 检测
-        // 只有槽位根物体的 Image 需要接收射线
-        foreach (var img in GetComponentsInChildren<UnityEngine.UI.Image>())
-        {
-            if (img.gameObject != gameObject)
-                img.raycastTarget = false;
-        }
-        foreach (var txt in GetComponentsInChildren<TMPro.TMP_Text>())
-            txt.raycastTarget = false;
+        var inv = FindFirstObjectByType<InventoryUI>();
+        if (inv && inv.inventoryPanel)
+            _panelRect = inv.inventoryPanel.GetComponent<RectTransform>();
     }
 
     public void SetWeapon(WeaponData weapon, int ammo, bool inRight, bool inLeft)
@@ -58,23 +47,21 @@ public class ItemSlotUI : MonoBehaviour,
         if (iconImage)
         {
             iconImage.enabled = has && weapon.icon != null;
-            if (has && weapon.icon) iconImage.sprite = weapon.icon;
+            if (has && weapon.icon != null)
+            {
+                iconImage.sprite = weapon.icon;
+                iconImage.color  = Color.white;
+            }
         }
-        if (nameText)       nameText.text = has ? weapon.weaponName : "Empty";
-        if (ammoText)       ammoText.text = has ? $"{ammo}/{weapon.maxAmmo}" : "";
-        if (rightHandBadge) rightHandBadge.enabled = inRight;
-        if (leftHandBadge)  leftHandBadge.enabled  = inLeft;
+        if (nameText) nameText.text = has ? weapon.weaponName : (inRight ? "右手 — 空" : "左手 — 空");
+        if (ammoText) ammoText.text = has ? $"{ammo} / {weapon.maxAmmo}" : "";
+        if (rightHandBadge) rightHandBadge.enabled = inRight && has;
+        if (leftHandBadge)  leftHandBadge.enabled  = inLeft  && has;
         if (emptyOverlay)   emptyOverlay.enabled   = !has;
     }
 
-    // ── 右键点击 → 弹出菜单
-    public void OnPointerClick(PointerEventData e)
-    {
-        if (e.button == PointerEventData.InputButton.Right)
-            onRightClick?.Invoke(this);
-    }
+    public void OnPointerClick(PointerEventData e) { }
 
-    // ── 拖拽开始
     public void OnBeginDrag(PointerEventData e)
     {
         if (currentWeapon == null) return;
@@ -84,7 +71,6 @@ public class ItemSlotUI : MonoBehaviour,
         _floatingIcon = new GameObject("DragIcon", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
         _floatingIcon.transform.SetParent(GetComponentInParent<Canvas>().transform, false);
         _floatingIcon.GetComponent<RectTransform>().sizeDelta = new Vector2(60, 60);
-
         var img = _floatingIcon.GetComponent<Image>();
         img.sprite        = currentWeapon.icon;
         img.raycastTarget = false;
@@ -102,13 +88,20 @@ public class ItemSlotUI : MonoBehaviour,
     {
         if (_canvasGroup) _canvasGroup.alpha = 1f;
         if (_floatingIcon) { Destroy(_floatingIcon); _floatingIcon = null; }
+
+        if (_dragSource == this && _panelRect != null)
+        {
+            if (!RectTransformUtility.RectangleContainsScreenPoint(_panelRect, e.position, e.pressEventCamera))
+                onDropOutside?.Invoke(this);
+        }
+
         _dragSource = null;
     }
 
-    // ── 放下到此槽位
     public void OnDrop(PointerEventData e)
     {
         if (_dragSource == null || _dragSource == this) return;
         onDrop?.Invoke(_dragSource, this);
     }
+
 }

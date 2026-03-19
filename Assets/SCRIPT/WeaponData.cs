@@ -1,5 +1,8 @@
 using UnityEngine;
 
+public enum WeaponRarity { Common, Uncommon, Rare, Epic, Legendary, Mythic }
+
+
 /// <summary>
 /// 武器数据（ScriptableObject）
 /// 右键 Project → Create → Game → WeaponData
@@ -12,6 +15,24 @@ public class WeaponData : ScriptableObject
     public Sprite icon;
     [Tooltip("武器的 3D 模型 Prefab，拾取后显示在手上")]
     public GameObject modelPrefab;
+
+    [Header("稀有度")]
+    public WeaponRarity rarity = WeaponRarity.Common;
+
+    /// <summary>根据稀有度返回对应颜色</summary>
+    public Color RarityColor()
+    {
+        switch (rarity)
+        {
+            case WeaponRarity.Common:    return new Color(0.85f, 0.85f, 0.85f); // 白
+            case WeaponRarity.Uncommon:  return new Color(0.2f,  0.85f, 0.2f);  // 绿
+            case WeaponRarity.Rare:      return new Color(0.2f,  0.5f,  1f);    // 蓝
+            case WeaponRarity.Epic:      return new Color(0.6f,  0.1f,  0.9f);  // 紫
+            case WeaponRarity.Legendary: return new Color(1f,    0.15f, 0.15f); // 红
+            case WeaponRarity.Mythic:    return new Color(1f,    0.85f, 0.1f);  // 金
+            default: return Color.white;
+        }
+    }
 
     [Header("射击参数")]
     public float damage       = 25f;

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// 第三人称相机（雨中冒险2风格）
@@ -65,7 +66,6 @@ public class FPS_Camera : MonoBehaviour
     private float _savedYaw           = 0f;
     private float _savedPitch         = 0f;
     public  float freeLookReturnSpeed = 35f;  // 回正速度，Inspector 可调
-    private bool  _isReturning        = false;
     private bool  _isSnapReturning    = false;  // 松开Alt后的平滑回正状态
 
     // ── 私有：震动（本地空间偏移，不受 LookAt 影响）
@@ -157,7 +157,6 @@ public class FPS_Camera : MonoBehaviour
                 // currentX/Y 保持在自由视角当前位置（不赋值，让 Lerp 从这里开始）
                 // xRotation/yRotation 设为目标（普通相机跟随角色的角度）
                 _isFreeLooking   = false;
-                _isReturning     = false;
                 _isSnapReturning = true;   // 启动平滑回正
                 // currentX/currentY 故意不动，保留自由视角最后的角度
                 // 下方 Lerp 会从这里平滑过渡到 xRotation/yRotation
@@ -211,22 +210,28 @@ public class FPS_Camera : MonoBehaviour
             // ★ 正常瞄准模式：直接赋值，零延迟，无滑动感
             currentX     = xRotation;
             currentY     = yRotation;
-            _isReturning = false;
         }
 
         // ── 计算基础位置（后坐偏移叠加到 pitch）
-        Quaternion rotation   = Quaternion.Euler(currentX - _recoilPitch, currentY, 0f);
-        Vector3    desiredPos    = target.position + rotation * offset;
+        Quaternion rotation  = Quaternion.Euler(currentX - _recoilPitch, currentY, 0f);
+        Vector3    desiredPos = target.position + rotation * offset;
+        Vector3    finalPos   = desiredPos;
 
-        // ── 防穿墙
-        Vector3 finalPos = desiredPos;
         if (enableCollision)
         {
+            // ── 指定 Tag 物体：半透明处理，不推开相机
+            FadeNearbyObjects(target.position, desiredPos);
+
+            // ── 其他物体：正常相机回避推开
             Vector3 dir     = desiredPos - target.position;
             float   maxDist = dir.magnitude;
             if (Physics.SphereCast(target.position, collisionRadius, dir.normalized,
                                    out RaycastHit hit, maxDist, collisionMask))
-                finalPos = hit.point + hit.normal * collisionRadius;
+            {
+                // 如果打到的是指定 Tag 物体就不推开
+                if (!IsTransparentTag(hit.collider.gameObject.tag))
+                    finalPos = hit.point + hit.normal * collisionRadius;
+            }
         }
 
         transform.position = finalPos;
@@ -270,6 +275,87 @@ public class FPS_Camera : MonoBehaviour
         {
             bobTimer       = 0f;
             bobLocalOffset = Vector3.Lerp(bobLocalOffset, Vector3.zero, Time.deltaTime * 8f);
+        }
+    }
+
+
+    // ════════════════════════════════════════════════════
+    //  近距离半透明（仅对指定 Tag 生效）
+    // ════════════════════════════════════════════════════
+    [Header("半透明 Tag 列表（这些 Tag 的物体靠近相机会半透明而不是推开相机）")]
+    public string[] transparentTags = { "Player", "Pickup", "Weapon" };
+
+    [Header("半透明距离")]
+    public float fadeStartDist = 1.8f;
+    public float fadeEndDist   = 0.4f;
+
+    private Dictionary<Renderer, Material[]> _originalMats  = new Dictionary<Renderer, Material[]>();
+    private HashSet<Renderer>                _fadingNow      = new HashSet<Renderer>();
+
+    bool IsTransparentTag(string tag)
+    {
+        foreach (var t in transparentTags)
+            if (t == tag) return true;
+        return false;
+    }
+
+    void FadeNearbyObjects(Vector3 playerPos, Vector3 camPos)
+    {
+        Vector3 dir  = camPos - playerPos;
+        float   dist = dir.magnitude;
+        var     hits = Physics.SphereCastAll(playerPos, 0.3f, dir.normalized, dist, collisionMask);
+
+        var currentlyFading = new HashSet<Renderer>();
+
+        foreach (var hit in hits)
+        {
+            if (hit.collider.isTrigger) continue;
+
+            // 只处理指定 Tag 的物体
+            if (!IsTransparentTag(hit.collider.gameObject.tag))
+            {
+                // 找根物体的 Tag
+                var root = hit.collider.transform.root;
+                if (!IsTransparentTag(root.gameObject.tag)) continue;
+            }
+
+            var rends = hit.collider.GetComponentsInChildren<Renderer>();
+            foreach (var r in rends)
+            {
+                if (r == null) continue;
+                float objDist = Vector3.Distance(r.transform.position, camPos);
+                float alpha   = Mathf.Clamp01(Mathf.InverseLerp(fadeEndDist, fadeStartDist, objDist));
+
+                // 第一次淡出时保存原始材质实例
+                if (!_originalMats.ContainsKey(r))
+                    _originalMats[r] = r.materials;
+
+                SetRendererAlpha(r, alpha);
+                currentlyFading.Add(r);
+            }
+        }
+
+        // 恢复不再需要淡出的物体
+        var toRestore = new List<Renderer>();
+        foreach (var r in _originalMats.Keys)
+            if (!currentlyFading.Contains(r))
+                toRestore.Add(r);
+
+        foreach (var r in toRestore)
+        {
+            if (r != null) SetRendererAlpha(r, 1f);
+            _originalMats.Remove(r);
+        }
+
+        _fadingNow = currentlyFading;
+    }
+
+    void SetRendererAlpha(Renderer r, float alpha)
+    {
+        foreach (var mat in r.materials)
+        {
+            if (alpha < 0.99f) URPMaterialUtil.SetTransparent(mat);
+            URPMaterialUtil.SetAlpha(mat, alpha);
         }
     }
 
