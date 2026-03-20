@@ -34,9 +34,19 @@ public class ItemSlotUI : MonoBehaviour,
     void Awake()
     {
         _canvasGroup = GetComponent<CanvasGroup>();
+        // Start 里查找，确保 InventoryUI 已初始化
+    }
+
+    void Start()
+    {
         var inv = FindFirstObjectByType<InventoryUI>();
-        if (inv && inv.inventoryPanel)
+        if (inv != null && inv.inventoryPanel != null)
             _panelRect = inv.inventoryPanel.GetComponent<RectTransform>();
+    }
+
+    public void SetPanelRect(RectTransform rect)
+    {
+        _panelRect = rect;
     }
 
     public void SetWeapon(WeaponData weapon, int ammo, bool inRight, bool inLeft)
@@ -54,7 +64,7 @@ public class ItemSlotUI : MonoBehaviour,
             }
         }
         if (nameText) nameText.text = has ? weapon.weaponName : (inRight ? "右手 — 空" : "左手 — 空");
-        if (ammoText) ammoText.text = has ? $"{ammo} / {weapon.maxAmmo}" : "";
+        if (ammoText) ammoText.text = has ? $"{ammo} / {InventorySystem.Instance?.GetMaxAmmo(slotIndex) ?? weapon.maxAmmo}" : "";
         if (rightHandBadge) rightHandBadge.enabled = inRight && has;
         if (leftHandBadge)  leftHandBadge.enabled  = inLeft  && has;
         if (emptyOverlay)   emptyOverlay.enabled   = !has;
@@ -103,5 +113,4 @@ public class ItemSlotUI : MonoBehaviour,
         if (_dragSource == null || _dragSource == this) return;
         onDrop?.Invoke(_dragSource, this);
     }
-
 }

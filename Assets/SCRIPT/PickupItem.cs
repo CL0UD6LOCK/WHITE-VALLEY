@@ -28,39 +28,29 @@ public class PickupItem : MonoBehaviour
             _visual.Init(itemData.RarityColor(), itemData.modelPrefab);
     }
 
-    void Update()
-    {
-        if (_playerInRange && Input.GetKeyDown(KeyCode.E))
-            TryPickup();
-    }
-
     void OnTriggerEnter(Collider other)
     {
         var inv = other.GetComponent<InventorySystem>();
         if (inv == null) return;
-        _player        = inv;
-        _playerInRange = true;
-    }
-
-    void OnTriggerExit(Collider other)
-    {
-        if (other.GetComponent<InventorySystem>() == null) return;
-        _player        = null;
-        _playerInRange = false;
+        _player = inv;
+        TryPickup();
     }
 
     void TryPickup()
     {
         if (_player == null || itemData == null) return;
 
-        // 这里接入你的道具效果逻辑
-        // 例如：extra jump pickup
         var player = _player.GetComponent<FPS_PlayerController>();
-        if (player != null)
-        {
-            // 示例：额外跳跃道具
-            // player.AddPermanentJump(1);
-        }
+
+        // 检测并应用道具效果
+        var bulletSizeUp = GetComponent<BulletSizeUpItem>();
+        if (bulletSizeUp != null) bulletSizeUp.Apply();
+
+        var magSizeUp = GetComponent<MagSizeUpItem>();
+        if (magSizeUp != null) magSizeUp.Apply();
+
+        // 额外跳跃道具示例
+        // if (player != null) player.AddPermanentJump(1);
 
         Debug.Log($"拾取道具: {itemData.itemName}");
         _visual?.OnPickedUp();

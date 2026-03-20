@@ -33,7 +33,7 @@ public class InventoryUI : MonoBehaviour
 
     private InventorySystem _inv;
 
-    void Awake()
+    void Start()
     {
         _inv = FindFirstObjectByType<InventorySystem>();
         if (_inv) _inv.onInventoryChanged.AddListener(Refresh);

@@ -44,6 +44,17 @@ public class Bullet : MonoBehaviour
     void Start()
     {
         Destroy(gameObject, lifetime);
+
+        // ── 应用道具倍率
+        damage *= BulletSizeUpItem.DamageMultiplier;
+
+        // 碰撞体积缩放
+        var col = GetComponent<SphereCollider>();
+        if (col != null)
+            col.radius *= BulletSizeUpItem.SizeMultiplier;
+
+        // 弹头视觉也跟着缩放
+        transform.localScale = Vector3.one * BulletSizeUpItem.SizeMultiplier;
     }
 
     public void Launch(Vector3 velocity)
@@ -134,6 +145,9 @@ public class Bullet : MonoBehaviour
     void OnTriggerEnter(Collider other)
     {
         if (other.isTrigger) return;
+
+        // 无视 Player tag 的物体
+        if (other.CompareTag("Player") || other.transform.root.CompareTag("Player")) return;
 
         var health = other.GetComponentInParent<HealthSystem>();
         if (health != null)

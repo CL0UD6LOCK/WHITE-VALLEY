@@ -8,8 +8,18 @@ using UnityEngine.Events;
 public class InventorySystem : MonoBehaviour
 {
     // ── 背包槽（最多2把枪）
-    public WeaponData[] slots      = new WeaponData[2];  // 槽位存数据
-    public int[]        ammoInSlot = new int[2];         // 每把枪当前弹药
+    public WeaponData[] slots      = new WeaponData[2];
+    public int[]        ammoInSlot = new int[2];
+
+    // ── 全局弹夹加成（道具叠加，不修改 WeaponData）
+    public int globalMagBonus = 0;
+
+    /// <summary>获取指定槽位的实际最大弹药（含道具加成）</summary>
+    public int GetMaxAmmo(int slotIndex)
+    {
+        if (slots[slotIndex] == null) return 0;
+        return slots[slotIndex].maxAmmo + globalMagBonus;
+    }
 
     // ── 左右手装备（存的是槽位索引，-1=空手）
     public int leftHandSlot  = -1;
@@ -46,7 +56,7 @@ public class InventorySystem : MonoBehaviour
             if (slots[i] == null)
             {
                 slots[i]      = weapon;
-                ammoInSlot[i] = weapon.maxAmmo;
+                ammoInSlot[i] = weapon.maxAmmo + globalMagBonus;
 
                 // 自动装备到空手
                 if (rightHandSlot == -1)      rightHandSlot = i;
@@ -130,7 +140,7 @@ public class InventorySystem : MonoBehaviour
     {
         if (rightHandSlot >= 0 && slots[rightHandSlot] != null)
         {
-            ammoInSlot[rightHandSlot] = slots[rightHandSlot].maxAmmo;
+            ammoInSlot[rightHandSlot] = GetMaxAmmo(rightHandSlot);
             onInventoryChanged?.Invoke();
         }
     }
@@ -139,7 +149,7 @@ public class InventorySystem : MonoBehaviour
     {
         if (leftHandSlot >= 0 && slots[leftHandSlot] != null)
         {
-            ammoInSlot[leftHandSlot] = slots[leftHandSlot].maxAmmo;
+            ammoInSlot[leftHandSlot] = GetMaxAmmo(leftHandSlot);
             onInventoryChanged?.Invoke();
         }
     }
